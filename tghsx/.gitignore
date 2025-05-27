@@ -1,0 +1,19 @@
+# Node
+node_modules/
+.env
+.next/
+dist/
+build/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Solidity/Hardhat
+cache/
+artifacts/
+
+# Misc
+.DS_Store
+.env.local

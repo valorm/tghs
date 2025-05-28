@@ -1,86 +1,81 @@
+import time
 import os
 from web3 import Web3
 from supabase import create_client
 from dotenv import load_dotenv
-from backend.utils.constants import RPC_URL
+from backend.utils.constants import RPC_URL, TOKEN_ADDRESS, TOKEN_ABI, PRIVATE_KEY
 
-# Load environment
+# Load environment variables
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '.env'))
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_KEY")
-PRIVATE_KEY  = os.getenv("MINTER_PRIVATE_KEY")
-TOKEN_ADDRESS = os.getenv("TOKEN_ADDRESS")
-
-if not all([SUPABASE_URL, SUPABASE_KEY, PRIVATE_KEY, TOKEN_ADDRESS]):
-    raise Exception("Missing env vars for mint worker (SUPABASE_URL, SUPABASE_KEY, MINTER_PRIVATE_KEY, TOKEN_ADDRESS)")
 
 # Initialize Supabase client
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# tGHSX token details
-TOKEN_ABI = [{
-    "inputs": [
-        {"internalType": "address", "name": "to", "type": "address"},
-        {"internalType": "uint256", "name": "amount", "type": "uint256"}
-    ],
-    "name": "mint",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-}]
+# Web3 setup
+w3 = Web3(Web3.HTTPProvider(RPC_URL))
+account = w3.eth.account.from_key(PRIVATE_KEY)
+token = w3.eth.contract(
+    address=Web3.to_checksum_address(TOKEN_ADDRESS),
+    abi=TOKEN_ABI
+)
 
 def run_minter():
-    w3 = Web3(Web3.HTTPProvider(RPC_URL))
-    account = w3.eth.account.from_key(PRIVATE_KEY)
-    
-    # Convert to checksum address to avoid ENS issues
-    token_address = Web3.to_checksum_address(TOKEN_ADDRESS)
-    token = w3.eth.contract(address=token_address, abi=TOKEN_ABI)
+    print("🟢 Mint Worker Started")
 
-    # Fetch up to 10 pending mint requests
-    resp = supabase.table("mint_queue").select("*").limit(10).execute()
-    entries = resp.data or []
-    print(f"Found {len(entries)} mint request(s).")
-
-    for entry in entries:
-        wallet = entry["wallet"]
-        amount_wei = int(float(entry["amount"]) * 1e18)
-
+    while True:
         try:
-            # Validate wallet address
-            if not wallet or len(wallet) != 42 or not wallet.startswith('0x'):
-                print(f"❌ Invalid wallet address: {wallet}")
-                continue
-                
-            # Convert wallet to checksum address
-            wallet = Web3.to_checksum_address(wallet)
+            # Fetch pending mint requests
+            res = supabase.table("mint_requests") \
+                          .select("*") \
+                          .eq("status", "pending") \
+                          .execute()
+            requests = res.data or []
+            print(f"🧾 Found {len(requests)} mint request(s).")
 
-            # Build the transaction
-            tx = token.functions.mint(wallet, amount_wei).build_transaction({
-                "from": account.address,
-                "nonce": w3.eth.get_transaction_count(account.address),
-                "gas": 200000,
-                "gasPrice": w3.eth.gas_price
-            })
+            for req in requests:
+                req_id = req["id"]
+                raw_wallet = req["wallet"]
+                # convert GHS amount to token smallest unit (18 decimals)
+                amount = int(float(req["amount"]) * 1e18)
 
-            # Sign & send (fixed for newer web3.py versions)
-            signed = w3.eth.account.sign_transaction(tx, PRIVATE_KEY)
-            tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction).hex()
+                # Validate wallet address
+                try:
+                    wallet = Web3.to_checksum_address(raw_wallet)
+                except Exception as ex:
+                    print(f"⚠️ Skipping invalid wallet '{raw_wallet}': {ex}")
+                    supabase.table("mint_requests") \
+                            .update({"status": "failed", "error": "invalid_wallet"}) \
+                            .eq("id", req_id) \
+                            .execute()
+                    continue
 
-            # Log mint event
-            supabase.table("mint_events").insert({
-                "wallet": wallet,
-                "amount": entry["amount"],
-                "tx_hash": tx_hash
-            }).execute()
+                # Build and sign transaction
+                tx = token.functions.mint(wallet, amount).build_transaction({
+                    "from": account.address,
+                    "nonce": w3.eth.get_transaction_count(account.address),
+                    "gas": 300_000,
+                    "gasPrice": w3.eth.gas_price
+                })
+                signed = w3.eth.account.sign_transaction(tx, PRIVATE_KEY)
+                # Use raw_transaction for Web3.py v6
+                raw_tx = signed.raw_transaction
+                tx_hash = w3.eth.send_raw_transaction(raw_tx)
+                receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
 
-            # Remove from queue
-            supabase.table("mint_queue").delete().eq("id", entry["id"]).execute()
+                print(f"✅ Minted {req['amount']} GHS to {wallet} — tx: {tx_hash.hex()}")
 
-            print(f"✅ Minted {entry['amount']} to {wallet} — tx: {tx_hash}")
+                # Mark request as completed
+                supabase.table("mint_requests") \
+                        .update({"status": "completed", "tx_hash": tx_hash.hex()}) \
+                        .eq("id", req_id) \
+                        .execute()
 
         except Exception as e:
-            print(f"❌ Failed to mint {entry['amount']} to {wallet}: {e}")
+            print(f"❌ Worker error: {e}")
+
+        time.sleep(10)
 
 if __name__ == "__main__":
     run_minter()

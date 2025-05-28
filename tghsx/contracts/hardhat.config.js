@@ -1,6 +1,6 @@
-require('@nomicfoundation/hardhat-toolbox')
-require('dotenv').config()
-const path = require('path')
+require('@nomicfoundation/hardhat-toolbox');
+require('dotenv').config();
+const path = require('path');
 
 module.exports = {
   solidity: '0.8.20',
@@ -11,13 +11,11 @@ module.exports = {
     }
   },
   paths: {
-    sources: "./contracts",
-    artifacts: "./artifacts",
-    cache: "./cache"
+    sources: './contracts',
+    artifacts: './artifacts',
+    cache: './cache'
   },
   etherscan: {
-    apiKey: {
-      polygonAmoy: process.env.POLYGONSCAN_API_KEY
-    }
+    apiKey: process.env.ETHERSCAN_API_KEY 
   }
-}
+};

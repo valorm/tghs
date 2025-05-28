@@ -12,21 +12,21 @@ class MintRequest(BaseModel):
 @router.post("/mint-request")
 def create_mint_request(req: MintRequest):
     try:
-        # Insert into Supabase mint_requests table
+        # Insert into Supabase mint_requests table with pending status
         response = (
             supabase
             .table("mint_requests")
             .insert({
                 "wallet": req.wallet,
                 "amount": req.amount,
-                "kyc_level": req.kyc_level
+                "kyc_level": req.kyc_level,
+                "status": "pending"
             })
             .execute()
         )
 
-        # In newer supabase-py versions, check for errors differently
-        # The response object has data and count attributes directly
-        if hasattr(response, 'data') and response.data is not None:
+        # Newer supabase-py returns data attribute
+        if hasattr(response, "data") and response.data is not None:
             return {
                 "message": "Mint request logged",
                 "data": response.data

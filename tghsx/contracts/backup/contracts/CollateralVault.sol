@@ -19,7 +19,6 @@ contract CollateralVault is Ownable, ReentrancyGuard {
     event DepositETH(address indexed user, uint256 amount);
     event DepositUSDT(address indexed user, uint256 amount);
     event TokenBurned(address indexed user, uint256 amount);
-    event CollateralUnlocked(address indexed user, string asset, uint256 amount);
 
     constructor(
         address _ethUsdFeed,
@@ -53,49 +52,6 @@ contract CollateralVault is Ownable, ReentrancyGuard {
         emit TokenBurned(msg.sender, amount);
     }
 
-    function unlockETH(uint256 amount) external nonReentrant {
-        require(amount > 0, "Amount must be > 0");
-        require(ethDeposits[msg.sender] >= amount, "Insufficient ETH");
-
-        uint256 newEth = ethDeposits[msg.sender] - amount;
-
-        (, int ethUsd,,,) = ethUsdPriceFeed.latestRoundData();
-        (, int ghsUsd,,,) = ghsUsdPriceFeed.latestRoundData();
-        require(ethUsd > 0 && ghsUsd > 0, "Invalid oracle data");
-
-        uint256 ghsValue = (newEth * uint256(ethUsd)) / uint256(ghsUsd);
-        uint256 minted = tghsxToken.balanceOf(msg.sender);
-
-        require(ghsValue * 100 >= minted * 150, "Breaks 150% ratio");
-
-        ethDeposits[msg.sender] = newEth;
-
-        (bool ok, ) = msg.sender.call{value: amount}("");
-        require(ok, "ETH transfer failed");
-
-        emit CollateralUnlocked(msg.sender, "ETH", amount);
-    }
-
-    function unlockUSDT(uint256 amount, address usdtToken) external nonReentrant {
-        require(amount > 0, "Amount must be > 0");
-        require(usdtDeposits[msg.sender] >= amount, "Insufficient USDT");
-
-        (, int ghsUsd,,,) = ghsUsdPriceFeed.latestRoundData();
-        require(ghsUsd > 0, "Invalid oracle data");
-
-        uint256 newUsdt = usdtDeposits[msg.sender] - amount;
-        uint256 ghsValue = (newUsdt * 1e8) / uint256(ghsUsd);
-        uint256 minted = tghsxToken.balanceOf(msg.sender);
-
-        require(ghsValue * 100 >= minted * 150, "Breaks 150% ratio");
-
-        usdtDeposits[msg.sender] = newUsdt;
-
-        IERC20(usdtToken).transfer(msg.sender, amount);
-
-        emit CollateralUnlocked(msg.sender, "USDT", amount);
-    }
-
     function getETHValueInGHS(address user) external view returns (uint256) {
         uint256 ethAmount = ethDeposits[user];
         (, int ethUsd,,,) = ethUsdPriceFeed.latestRoundData();
@@ -112,6 +68,7 @@ contract CollateralVault is Ownable, ReentrancyGuard {
 
         require(ghsUsd > 0, "Invalid oracle data");
 
-        return (usdtAmount * 1e8) / uint256(ghsUsd); // USDT = $1 with 8 decimals
+        // USDT assumed 1 USD = 1e8 (Chainlink decimals)
+        return (usdtAmount * 1e8) / uint256(ghsUsd);
     }
 }

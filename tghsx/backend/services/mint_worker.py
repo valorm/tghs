@@ -24,11 +24,11 @@ token = w3.eth.contract(
 
 # Load Vault ABI from file
 def load_vault_abi():
-    abi_path = os.path.join(os.path.dirname(__file__), '..', 'abi', 'CollateralVault.json')
+    abi_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'abi', 'CollateralVault.json'))
     try:
         with open(abi_path, 'r') as f:
             vault_abi = json.load(f)
-        return vault_abi
+        return vault_abi["abi"]
     except FileNotFoundError:
         print(f"❌ Vault ABI file not found at {abi_path}")
         raise

@@ -4,6 +4,9 @@ from backend.utils.constants import GHS_FEED_ADDRESS, GHS_FEED_ABI, RPC_URL
 
 router = APIRouter()
 
+w3 = Web3(Web3.HTTPProvider(RPC_URL))
+ghs_feed = w3.eth.contract(address=Web3.to_checksum_address(GHS_FEED_ADDRESS), abi=GHS_FEED_ABI)
+
 @router.get("/ghs-price")
 def get_ghs_price():
     try:

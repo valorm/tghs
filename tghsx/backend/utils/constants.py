@@ -4,8 +4,8 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-# Existing constants
-GHS_FEED_ADDRESS = "0xE06e0f832a509ca6acC1D822eF41A96a05Fd42e5"  # your deployed mock GHS/USD
+# Chainlink GHS/USD mock feed for testing
+GHS_FEED_ADDRESS = "0xE06e0f832a509ca6acC1D822eF41A96a05Fd42e5"
 GHS_FEED_ABI = [
     {
         "inputs": [],
@@ -22,27 +22,24 @@ GHS_FEED_ABI = [
     }
 ]
 
-# Environment variables from .env file
+# Load from .env
 PRIVATE_KEY = os.getenv("PRIVATE_KEY")
-RPC_URL = os.getenv("AMOY_RPC_URL", "https://rpc-amoy.polygon.technology")  # fallback to default
+RPC_URL = os.getenv("AMOY_RPC_URL", "https://rpc-amoy.polygon.technology")
 VAULT_ADDRESS = os.getenv("VAULT_ADDRESS")
 TOKEN_ADDRESS = os.getenv("TOKEN_ADDRESS")
 
-# Validate required environment variables
+# Validate required .env variables
 required_vars = {
     "PRIVATE_KEY": PRIVATE_KEY,
     "VAULT_ADDRESS": VAULT_ADDRESS,
     "TOKEN_ADDRESS": TOKEN_ADDRESS
 }
+for var, val in required_vars.items():
+    if not val:
+        raise ValueError(f"Missing env variable: {var}")
 
-for var_name, var_value in required_vars.items():
-    if not var_value:
-        raise ValueError(f"{var_name} not found in environment variables")
-
-# TOKEN_ABI - You'll need to add your ERC20 token ABI here
+# ABI for TGHXToken
 TOKEN_ABI = [
-    # Add your token contract ABI here
-    # This is a basic ERC20 ABI - replace with your actual token ABI
     {
         "inputs": [
             {"internalType": "address", "name": "to", "type": "address"},
@@ -59,6 +56,105 @@ TOKEN_ABI = [
         "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
         "stateMutability": "view",
         "type": "function"
+    },
+    {
+        "inputs": [
+            {"internalType": "address", "name": "account", "type": "address"},
+            {"internalType": "uint256", "name": "amount", "type": "uint256"}
+        ],
+        "name": "burnFrom",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
     }
-    # Add more ABI functions as needed
+]
+
+# Complete ABI for CollateralVault (including view functions)
+VAULT_ABI = [
+    # View Functions
+    {
+        "inputs": [{"internalType": "address", "name": "user", "type": "address"}],
+        "name": "getETHValueInGHS",
+        "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [{"internalType": "address", "name": "user", "type": "address"}],
+        "name": "getUSDTValueInGHS",
+        "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "ethUsdPriceFeed",
+        "outputs": [{"internalType": "contract AggregatorV3Interface", "name": "", "type": "address"}],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "ghsUsdPriceFeed",
+        "outputs": [{"internalType": "contract AggregatorV3Interface", "name": "", "type": "address"}],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [{"internalType": "address", "name": "", "type": "address"}],
+        "name": "ethDeposits",
+        "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [{"internalType": "address", "name": "", "type": "address"}],
+        "name": "usdtDeposits",
+        "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    
+    # Transaction Functions
+    {
+        "inputs": [{"internalType": "uint256", "name": "amount", "type": "uint256"}],
+        "name": "burn",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "depositETH",
+        "outputs": [],
+        "stateMutability": "payable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {"internalType": "uint256", "name": "amount", "type": "uint256"},
+            {"internalType": "address", "name": "usdtToken", "type": "address"}
+        ],
+        "name": "depositUSDT",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [{"internalType": "uint256", "name": "amount", "type": "uint256"}],
+        "name": "unlockETH",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {"internalType": "uint256", "name": "amount", "type": "uint256"},
+            {"internalType": "address", "name": "usdtToken", "type": "address"}
+        ],
+        "name": "unlockUSDT",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    }
 ]

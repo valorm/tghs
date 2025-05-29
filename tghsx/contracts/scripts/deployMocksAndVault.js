@@ -1,31 +1,64 @@
-const hre = require("hardhat")
+const hre = require("hardhat");
 
 async function main() {
-  const [deployer] = await hre.ethers.getSigners()
-  console.log("Deploying contracts with:", deployer.address)
+  const [deployer] = await hre.ethers.getSigners();
+  console.log("Deploying contracts with:", deployer.address);
 
-  // Deploy mock ETH/USD feed ($2500, 8 decimals)
-  const Mock = await hre.ethers.getContractFactory("MockV3Aggregator")
-  const ethFeed = await Mock.deploy(8, 250000000)
-  await ethFeed.waitForDeployment()
-  console.log("Mock ETH/USD feed deployed at:", await ethFeed.getAddress())
+  // 1. Deploy mock price feeds
+  const Mock = await hre.ethers.getContractFactory("MockV3Aggregator");
+  
+  // ETH/USD feed: $2,500 with 8 decimals
+  const ethFeed = await Mock.deploy(8, 2_500_000_000);
+  await ethFeed.waitForDeployment();
+  const ethFeedAddress = await ethFeed.getAddress();
+  console.log("Mock ETH/USD feed deployed at:", ethFeedAddress);
 
-  // Deploy mock GHS/USD feed ($0.075, 8 decimals)
-  const ghsFeed = await Mock.deploy(8, 7500000)
-  await ghsFeed.waitForDeployment()
-  console.log("Mock GHS/USD feed deployed at:", await ghsFeed.getAddress())
+  // GHS/USD feed: $0.075 with 8 decimals
+  const ghsFeed = await Mock.deploy(8, 7_500_000);
+  await ghsFeed.waitForDeployment();
+  const ghsFeedAddress = await ghsFeed.getAddress();
+  console.log("Mock GHS/USD feed deployed at:", ghsFeedAddress);
 
-  // Deploy the CollateralVault
-  const Vault = await hre.ethers.getContractFactory("CollateralVault")
+  // 2. Deploy TGHSX token
+  const Token = await hre.ethers.getContractFactory("TGHXToken");
+  const token = await Token.deploy();
+  await token.waitForDeployment();
+  const tokenAddress = await token.getAddress();
+  console.log("TGHSX token deployed at:", tokenAddress);
+
+  // 3. Deploy CollateralVault
+  const Vault = await hre.ethers.getContractFactory("CollateralVault");
   const vault = await Vault.deploy(
-    await ethFeed.getAddress(),
-    await ghsFeed.getAddress()
-  )
-  await vault.waitForDeployment()
-  console.log("CollateralVault deployed at:", await vault.getAddress())
+    ethFeedAddress,
+    ghsFeedAddress,
+    tokenAddress
+  );
+  
+  await vault.waitForDeployment();
+  const vaultAddress = await vault.getAddress();
+  console.log("CollateralVault deployed at:", vaultAddress);
+
+  // 4. Grant MINTER_ROLE to vault
+  const grantTx = await token.grantRole(
+    await token.MINTER_ROLE(),
+    vaultAddress
+  );
+  await grantTx.wait();
+  console.log("Vault granted MINTER_ROLE on token");
+
+  // 5. Verify setup
+  console.log("\nDeployment Summary:");
+  console.log("ETH Feed:", ethFeedAddress);
+  console.log("GHS Feed:", ghsFeedAddress);
+  console.log("Token:", tokenAddress);
+  console.log("Vault:", vaultAddress);
+  console.log("Vault has MINTER_ROLE:", await token.hasRole(
+    await token.MINTER_ROLE(),
+    vaultAddress
+  ));
 }
 
 main().catch((error) => {
-  console.error(error)
-  process.exitCode = 1
-})
+  console.error(error);
+  process.exitCode = 1;
+});
